@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Speech Timer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Speech Timer">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+:root{--bg:#f6f4ef;--fg:#16181d;--muted:#6b7078;--card:#ffffff;--line:#dcd8cf;--accent:#1f6feb;--accent-fg:#fff;--warn:#d98e04;--over:#d1242f}
+:root[data-theme="dark"]{--bg:#0f1115;--fg:#f2f3f5;--muted:#9aa0a8;--card:#1a1d24;--line:#2b2f38;--accent:#4c8dff;--accent-fg:#0b0d11;--warn:#f5b73b;--over:#ff5d66}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overscroll-behavior:none;user-select:none;-webkit-user-select:none}
+body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) max(16px,env(safe-area-inset-right)) env(safe-area-inset-bottom) max(16px,env(safe-area-inset-left));transition:background .3s}
+body[data-state="warn"]{background:color-mix(in srgb,var(--warn) 22%,var(--bg))}
+body[data-state="over"]{background:color-mix(in srgb,var(--over) 26%,var(--bg))}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 0}
+h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.icon-btn{background:var(--card);border:1px solid var(--line);color:var(--fg);width:44px;height:44px;border-radius:50%;font-size:20px;cursor:pointer}
+main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0}
+#display{font-variant-numeric:tabular-nums;font-weight:700;line-height:1;text-align:center;font-size:min(34vw,44vh);letter-spacing:-.02em;white-space:nowrap}
+#display.secs{font-size:min(24vw,32vh)}
+#unit{color:var(--muted);font-size:18px;margin-top:6px;min-height:22px}
+#status{margin-top:10px;font-size:15px;font-weight:600;min-height:20px}
+body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #status{color:var(--over)}
+.controls{display:flex;gap:14px;justify-content:center;padding:10px 0 14px}
+.btn{flex:1;max-width:200px;height:64px;border-radius:32px;border:1px solid var(--line);background:var(--card);color:var(--fg);font-size:20px;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:transparent}
+.btn:active{transform:scale(.97)}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px 16px;margin-bottom:14px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0}
+.row+.row{border-top:1px solid var(--line)}
+.label{font-size:15px;color:var(--muted)}
+.seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:3px}
+.seg button{border:0;background:transparent;color:var(--muted);font-size:15px;font-weight:600;padding:9px 14px;border-radius:9px;cursor:pointer;min-height:40px}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
+.stepper{display:flex;align-items:center;gap:8px}
+.stepper button{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-size:22px;cursor:pointer}
+.stepper output{min-width:76px;text-align:center;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.presets{display:flex;gap:6px;padding:8px 0}
+.presets button{flex:1;min-width:0;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-weight:600;cursor:pointer}
+#settings[hidden]{display:none}
+@media (orientation:landscape) and (max-height:500px){#display{font-size:min(24vw,50vh)}#display.secs{font-size:min(20vw,46vh)}header{padding:4px 0}.btn{height:52px}#settings{max-height:60vh;overflow:auto}}
+</style>
+</head>
+<body data-state="idle">
+<header>
+  <h1>Speech Timer</h1>
+  <button class="icon-btn" id="gear" aria-label="Settings" aria-expanded="false">⚙︎</button>
+</header>
+
+<section id="settings" class="panel" hidden>
+  <div class="row"><span class="label">Theme</span>
+    <div class="seg" data-key="theme"><button data-v="light">Bright</button><button data-v="dark">Dark</button></div></div>
+  <div class="row"><span class="label">Direction</span>
+    <div class="seg" data-key="dir"><button data-v="down">Countdown</button><button data-v="up">Count up</button></div></div>
+  <div class="row"><span class="label">Display</span>
+    <div class="seg" data-key="fmt"><button data-v="min">Minutes</button><button data-v="sec">Min:Sec</button></div></div>
+  <div class="row"><span class="label">Speech length</span>
+    <div class="stepper"><button id="durDown" aria-label="Less">−</button><output id="durOut"></output><button id="durUp" aria-label="More">+</button></div></div>
+  <div class="presets" id="presets"></div>
+  <div class="row"><span class="label">Colour cues &amp; vibrate</span>
+    <div class="seg" data-key="cues"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
+</section>
+
+<main>
+  <div id="display" aria-live="off">5</div>
+  <div id="unit"></div>
+  <div id="status"></div>
+</main>
+
+<div class="controls">
+  <button class="btn" id="reset">Reset</button>
+  <button class="btn primary" id="toggle">Start</button>
+</div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const defaults = {theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', dir:'down', fmt:'sec', dur:300, cues:'on'};
+  let S = {...defaults};
+  try { Object.assign(S, JSON.parse(localStorage.getItem('speechTimer') || '{}')); } catch(e){}
+  const save = () => { try { localStorage.setItem('speechTimer', JSON.stringify(S)); } catch(e){} };
+
+  let running = false, startedAt = 0, accumulated = 0, raf = 0, wake = null, warned = false, overed = false;
+  const elapsed = () => (accumulated + (running ? performance.now() - startedAt : 0)) / 1000;
+  const fmtDur = s => s % 60 === 0 ? (s/60) + ' min' : Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+  const pad = n => String(n).padStart(2,'0');
+
+  function render() {
+    const e = elapsed(), down = S.dir === 'down';
+    const remain = S.dur - e, isOver = down && remain <= 0;
+    let text, unit = '';
+    if (S.fmt === 'sec') {
+      const t = down ? (isOver ? Math.floor(-remain) : Math.ceil(remain)) : Math.floor(e);
+      text = (isOver && t > 0 ? '+' : '') + Math.floor(t/60) + ':' + pad(t%60);
+    } else {
+      const m = down ? (isOver ? Math.floor(-remain/60) : Math.ceil(remain/60)) : Math.floor(e/60);
+      text = (isOver && m > 0 ? '+' : '') + m;
+      unit = (m === 1 ? 'minute' : 'minutes') + (down ? (isOver ? ' over' : ' left') : ' elapsed');
+    }
+    const d = $('#display');
+    d.textContent = text; d.className = S.fmt === 'sec' ? 'secs' : '';
+    $('#unit').textContent = unit;
+
+    let state = 'idle', msg = '';
+    const warnAt = Math.min(60, S.dur * 0.25);
+    const active = running || e > 0;
+    if (active) {
+      state = 'run';
+      if (S.cues === 'on') {
+        if (e >= S.dur) { state = 'over'; msg = down ? 'Time is up' : 'Over time'; }
+        else if (remain <= warnAt) { state = 'warn'; msg = 'Wrap up'; }
+      }
+    }
+    document.body.dataset.state = state;
+    $('#status').textContent = msg || (active && !running ? 'Paused' : '');
+    if (S.cues === 'on' && running) {
+      if (state === 'warn' && !warned) { warned = true; buzz(120); }
+      if (state === 'over' && !overed) { overed = true; buzz([200,100,200]); }
+    }
+  }
+  const buzz = p => { try { navigator.vibrate && navigator.vibrate(p); } catch(e){} };
+  const loop = () => { render(); if (running) raf = requestAnimationFrame(loop); };
+
+  async function lock() { try { if ('wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); } catch(e){} }
+  function unlock() { try { wake && wake.release(); } catch(e){} wake = null; }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (running) lock(); render(); } });
+
+  function start() { running = true; startedAt = performance.now(); $('#toggle').textContent = 'Pause'; lock(); loop(); }
+  function pause() { accumulated += performance.now() - startedAt; running = false; cancelAnimationFrame(raf); $('#toggle').textContent = 'Resume'; unlock(); render(); }
+  function reset() { running = false; cancelAnimationFrame(raf); accumulated = 0; warned = overed = false; $('#toggle').textContent = 'Start'; unlock(); render(); }
+  $('#toggle').onclick = () => running ? pause() : start();
+  $('#reset').onclick = reset;
+  $('#display').onclick = () => $('#toggle').click();
+
+  function applyTheme() {
+    document.documentElement.dataset.theme = S.theme;
+    $('meta[name=theme-color]').content = S.theme === 'dark' ? '#0f1115' : '#f6f4ef';
+    document.documentElement.style.colorScheme = S.theme;
+  }
+  function syncUI() {
+    document.querySelectorAll('.seg').forEach(g => g.querySelectorAll('button').forEach(b =>
+      b.setAttribute('aria-pressed', String(S[g.dataset.key] === b.dataset.v))));
+    $('#durOut').textContent = fmtDur(S.dur);
+    applyTheme();
+  }
+  document.querySelectorAll('.seg').forEach(g => g.addEventListener('click', ev => {
+    const b = ev.target.closest('button'); if (!b) return;
+    S[g.dataset.key] = b.dataset.v; save(); syncUI(); render();
+  }));
+  const setDur = d => { S.dur = Math.max(15, Math.min(3600, d)); warned = overed = false; save(); syncUI(); render(); };
+  const stepFor = (d, dir) => (d < 60 || (d === 60 && dir < 0)) ? 15 : 30;
+  $('#durUp').onclick = () => setDur(S.dur + stepFor(S.dur, 1));
+  $('#durDown').onclick = () => setDur(S.dur - stepFor(S.dur, -1));
+  [1,2,3,5,7,10].forEach(m => {
+    const b = document.createElement('button'); b.textContent = m + 'm'; b.onclick = () => setDur(m*60); $('#presets').appendChild(b);
+  });
+  $('#gear').onclick = () => {
+    const s = $('#settings'); s.hidden = !s.hidden; $('#gear').setAttribute('aria-expanded', String(!s.hidden));
+  };
+
+  syncUI(); render();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+})();
+</script>
+</body>
+</html>
