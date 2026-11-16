@@ -25,7 +25,7 @@ h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.04em;text-transform:u
 .icon-btn{background:var(--card);border:1px solid var(--line);color:var(--fg);width:44px;height:44px;border-radius:50%;font-size:20px;cursor:pointer}
 main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0}
 #display{font-variant-numeric:tabular-nums;font-weight:700;line-height:1;text-align:center;font-size:min(34vw,44vh);letter-spacing:-.02em;white-space:nowrap}
-#display.reduced{font-size:min(17vw,22vh)}
+#display.reduced .s{font-size:.5em}
 #unit{color:var(--muted);font-size:18px;margin-top:6px;min-height:22px}
 #status{margin-top:10px;font-size:15px;font-weight:600;min-height:20px}
 body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #status{color:var(--over)}
@@ -47,7 +47,7 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
 .presets{display:flex;gap:6px;padding:8px 0}
 .presets button{flex:1;min-width:0;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-weight:600;cursor:pointer}
 #settings[hidden]{display:none}
-@media (orientation:landscape) and (max-height:500px){#display{font-size:min(24vw,50vh)}#display.reduced{font-size:min(12vw,25vh)}header{padding:4px 0}.btn{height:52px}#settings{max-height:60vh;overflow:auto}}
+@media (orientation:landscape) and (max-height:500px){#display{font-size:min(24vw,50vh)}header{padding:4px 0}.btn{height:52px}#settings{max-height:60vh;overflow:auto}}
 </style>
 </head>
 <body data-state="idle">
@@ -107,10 +107,10 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
   function render() {
     const e = elapsed(), down = S.dir === 'down';
     const remain = S.dur - e, isOver = down && remain <= 0;
-    let text, unit = '';
+    let text, unit = '', secPart = '';
     if (S.fmt === 'sec') {
       const t = down ? (isOver ? Math.floor(-remain) : Math.ceil(remain)) : Math.floor(e);
-      text = (isOver && t > 0 ? '+' : '') + Math.floor(t/60) + ':' + pad(t%60);
+      text = (isOver && t > 0 ? '+' : '') + Math.floor(t/60); secPart = ':' + pad(t%60);
     } else {
       const m = down ? (isOver ? Math.floor(-remain/60) : Math.ceil(remain/60)) : Math.floor(e/60);
       text = (isOver && m > 0 ? '+' : '') + m;
@@ -118,7 +118,13 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
     }
     const d = $('#display');
     d.className = S.fmt === 'sec' && S.size === 'reduced' ? 'reduced' : '';
-    if (text !== lastText || d.className !== lastCls) { lastText = text; lastCls = d.className; d.textContent = text; d.style.fontSize = ''; fit(d); }
+    const key = text + secPart;
+    if (key !== lastText || d.className !== lastCls) {
+      lastText = key; lastCls = d.className; d.style.fontSize = '';
+      d.textContent = text;
+      if (secPart) { const sp = document.createElement('span'); sp.className = 's'; sp.textContent = secPart; d.appendChild(sp); }
+      fit(d);
+    }
     $('#unit').textContent = unit;
 
     let state = 'idle', msg = '';
