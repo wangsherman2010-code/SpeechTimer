@@ -207,7 +207,7 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
   [1,2,3,5,7,10].forEach(m => {
     const b = document.createElement('button'); b.textContent = m + 'm'; b.onclick = () => setDur(m*60); $('#presets').appendChild(b);
   });
-  const COLORS = ['', '#ffffff', '#111111', '#f5c518', '#34c759', '#ff9f0a', '#ff453a', '#0a84ff', '#5ac8fa', '#bf5af2'];
+  const COLORS = ['', '#ffffff', '#111111', '#808080', '#f5c518', '#34c759', '#ff9f0a', '#ff453a', '#0a84ff', '#5ac8fa', '#bf5af2'];
   [['#minSw','mcol'],['#secSw','scol']].forEach(([sel,key]) => COLORS.forEach(c => {
     const b = document.createElement('button');
     b.dataset.c = c; b.setAttribute('aria-label', c || 'Automatic');
