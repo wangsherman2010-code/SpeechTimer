@@ -46,7 +46,14 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
 .stepper output{min-width:76px;text-align:center;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
 .presets{display:flex;gap:6px;padding:8px 0}
 .presets button{flex:1;min-width:0;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-weight:600;cursor:pointer}
+#settings{max-height:62vh;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:none}
 #settings[hidden]{display:none}
+.colrow{flex-direction:column;align-items:flex-start}
+.sw{display:flex;flex-wrap:wrap;margin:6px -5px 0}
+.sw button{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);margin:5px;padding:0;cursor:pointer;background:var(--c)}
+.sw button.auto{background:linear-gradient(135deg,#fff 50%,#111 50%)}
+.sw button[aria-pressed="true"]{box-shadow:0 0 0 3px var(--bg),0 0 0 6px var(--accent)}
+#secColRow[hidden]{display:none}
 #keepawake{position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:.01;pointer-events:none}
 @media (orientation:landscape) and (max-height:500px){#display{font-size:min(24vw,50vh)}header{padding:4px 0}.btn{height:52px}#settings{max-height:60vh;overflow:auto}}
 </style>
@@ -69,6 +76,8 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
   <div class="row"><span class="label">Speech length</span>
     <div class="stepper"><button id="durDown" aria-label="Less">−</button><output id="durOut"></output><button id="durUp" aria-label="More">+</button></div></div>
   <div class="presets" id="presets"></div>
+  <div class="row colrow"><span class="label">Minutes colour</span><div class="sw" id="minSw"></div></div>
+  <div class="row colrow" id="secColRow"><span class="label">Seconds colour</span><div class="sw" id="secSw"></div></div>
   <div class="row"><span class="label">Colour cues &amp; vibrate</span>
     <div class="seg" data-key="cues"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
 </section>
@@ -89,7 +98,7 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
 <script>
 (() => {
   const $ = s => document.querySelector(s);
-  const defaults = {theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', dir:'down', fmt:'sec', size:'normal', dur:300, cues:'on'};
+  const defaults = {theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', dir:'down', fmt:'sec', size:'normal', mcol:'', scol:'', dur:300, cues:'on'};
   let S = {...defaults};
   try { Object.assign(S, JSON.parse(localStorage.getItem('speechTimer') || '{}')); } catch(e){}
   const save = () => { try { localStorage.setItem('speechTimer', JSON.stringify(S)); } catch(e){} };
@@ -125,7 +134,7 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
     if (key !== lastText || d.className !== lastCls) {
       lastText = key; lastCls = d.className; d.style.fontSize = '';
       d.textContent = text;
-      if (secPart) { const sp = document.createElement('span'); sp.className = 's'; sp.textContent = secPart; d.appendChild(sp); }
+      if (secPart) { const sp = document.createElement('span'); sp.className = 's'; sp.style.color = S.scol || ''; sp.textContent = secPart; d.appendChild(sp); }
       fit(d);
     }
     $('#unit').textContent = unit;
@@ -180,6 +189,11 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
       b.setAttribute('aria-pressed', String(S[g.dataset.key] === b.dataset.v))));
     $('#durOut').textContent = fmtDur(S.dur);
     $('#sizeRow').hidden = S.fmt !== 'sec';
+    $('#secColRow').hidden = S.fmt !== 'sec';
+    const d = $('#display'), sp = d.querySelector('.s');
+    d.style.color = S.mcol || ''; if (sp) sp.style.color = S.scol || '';
+    [['#minSw','mcol'],['#secSw','scol']].forEach(([sel,key]) =>
+      document.querySelectorAll(sel + ' button').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.c || '') === (S[key] || '')))));
     applyTheme();
   }
   document.querySelectorAll('.seg').forEach(g => g.addEventListener('click', ev => {
@@ -193,6 +207,14 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
   [1,2,3,5,7,10].forEach(m => {
     const b = document.createElement('button'); b.textContent = m + 'm'; b.onclick = () => setDur(m*60); $('#presets').appendChild(b);
   });
+  const COLORS = ['', '#ffffff', '#111111', '#f5c518', '#34c759', '#ff9f0a', '#ff453a', '#0a84ff', '#5ac8fa', '#bf5af2'];
+  [['#minSw','mcol'],['#secSw','scol']].forEach(([sel,key]) => COLORS.forEach(c => {
+    const b = document.createElement('button');
+    b.dataset.c = c; b.setAttribute('aria-label', c || 'Automatic');
+    if (c) b.style.setProperty('--c', c); else b.className = 'auto';
+    b.onclick = () => { S[key] = c; save(); syncUI(); };
+    $(sel).appendChild(b);
+  }));
   $('#gear').onclick = () => {
     const s = $('#settings'); s.hidden = !s.hidden; $('#gear').setAttribute('aria-expanded', String(!s.hidden));
   };
