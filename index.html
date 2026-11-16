@@ -25,7 +25,7 @@ h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.04em;text-transform:u
 .icon-btn{background:var(--card);border:1px solid var(--line);color:var(--fg);width:44px;height:44px;border-radius:50%;font-size:20px;cursor:pointer}
 main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0}
 #display{font-variant-numeric:tabular-nums;font-weight:700;line-height:1;text-align:center;font-size:min(34vw,44vh);letter-spacing:-.02em;white-space:nowrap}
-#display.secs{font-size:min(24vw,32vh)}
+#display.reduced{font-size:min(17vw,22vh)}
 #unit{color:var(--muted);font-size:18px;margin-top:6px;min-height:22px}
 #status{margin-top:10px;font-size:15px;font-weight:600;min-height:20px}
 body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #status{color:var(--over)}
@@ -35,6 +35,7 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
 .btn:active{transform:scale(.97)}
 .panel{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px 16px;margin-bottom:14px}
 .row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0}
+#sizeRow[hidden]{display:none}
 .row+.row{border-top:1px solid var(--line)}
 .label{font-size:15px;color:var(--muted)}
 .seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:3px}
@@ -46,7 +47,7 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
 .presets{display:flex;gap:6px;padding:8px 0}
 .presets button{flex:1;min-width:0;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-weight:600;cursor:pointer}
 #settings[hidden]{display:none}
-@media (orientation:landscape) and (max-height:500px){#display{font-size:min(24vw,50vh)}#display.secs{font-size:min(20vw,46vh)}header{padding:4px 0}.btn{height:52px}#settings{max-height:60vh;overflow:auto}}
+@media (orientation:landscape) and (max-height:500px){#display{font-size:min(24vw,50vh)}#display.reduced{font-size:min(12vw,25vh)}header{padding:4px 0}.btn{height:52px}#settings{max-height:60vh;overflow:auto}}
 </style>
 </head>
 <body data-state="idle">
@@ -62,6 +63,8 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
     <div class="seg" data-key="dir"><button data-v="down">Countdown</button><button data-v="up">Count up</button></div></div>
   <div class="row"><span class="label">Display</span>
     <div class="seg" data-key="fmt"><button data-v="min">Minutes</button><button data-v="sec">Min:Sec</button></div></div>
+  <div class="row" id="sizeRow"><span class="label">Seconds size</span>
+    <div class="seg" data-key="size"><button data-v="normal">Normal</button><button data-v="reduced">Reduced</button></div></div>
   <div class="row"><span class="label">Speech length</span>
     <div class="stepper"><button id="durDown" aria-label="Less">−</button><output id="durOut"></output><button id="durUp" aria-label="More">+</button></div></div>
   <div class="presets" id="presets"></div>
@@ -83,7 +86,7 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
 <script>
 (() => {
   const $ = s => document.querySelector(s);
-  const defaults = {theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', dir:'down', fmt:'sec', dur:300, cues:'on'};
+  const defaults = {theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', dir:'down', fmt:'sec', size:'normal', dur:300, cues:'on'};
   let S = {...defaults};
   try { Object.assign(S, JSON.parse(localStorage.getItem('speechTimer') || '{}')); } catch(e){}
   const save = () => { try { localStorage.setItem('speechTimer', JSON.stringify(S)); } catch(e){} };
@@ -92,6 +95,14 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
   const elapsed = () => (accumulated + (running ? performance.now() - startedAt : 0)) / 1000;
   const fmtDur = s => s % 60 === 0 ? (s/60) + ' min' : Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
   const pad = n => String(n).padStart(2,'0');
+
+  let lastText = '', lastCls = '';
+  // Same size as the minutes view, but shrink only if the text would overflow the screen
+  function fit(d) {
+    const avail = document.body.clientWidth - 32, w = d.scrollWidth;
+    if (w > avail) d.style.fontSize = (parseFloat(getComputedStyle(d).fontSize) * avail / w) + 'px';
+  }
+  addEventListener('resize', () => { lastText = ''; render(); });
 
   function render() {
     const e = elapsed(), down = S.dir === 'down';
@@ -106,7 +117,8 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
       unit = (m === 1 ? 'minute' : 'minutes') + (down ? (isOver ? ' over' : ' left') : ' elapsed');
     }
     const d = $('#display');
-    d.textContent = text; d.className = S.fmt === 'sec' ? 'secs' : '';
+    d.className = S.fmt === 'sec' && S.size === 'reduced' ? 'reduced' : '';
+    if (text !== lastText || d.className !== lastCls) { lastText = text; lastCls = d.className; d.textContent = text; d.style.fontSize = ''; fit(d); }
     $('#unit').textContent = unit;
 
     let state = 'idle', msg = '';
@@ -133,7 +145,8 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
   function unlock() { try { wake && wake.release(); } catch(e){} wake = null; }
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (running) lock(); render(); } });
 
-  function start() { running = true; startedAt = performance.now(); $('#toggle').textContent = 'Pause'; lock(); loop(); }
+  function closeSettings() { $('#settings').hidden = true; $('#gear').setAttribute('aria-expanded', 'false'); }
+  function start() { closeSettings(); running = true; startedAt = performance.now(); $('#toggle').textContent = 'Pause'; lock(); loop(); }
   function pause() { accumulated += performance.now() - startedAt; running = false; cancelAnimationFrame(raf); $('#toggle').textContent = 'Resume'; unlock(); render(); }
   function reset() { running = false; cancelAnimationFrame(raf); accumulated = 0; warned = overed = false; $('#toggle').textContent = 'Start'; unlock(); render(); }
   $('#toggle').onclick = () => running ? pause() : start();
@@ -149,6 +162,7 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
     document.querySelectorAll('.seg').forEach(g => g.querySelectorAll('button').forEach(b =>
       b.setAttribute('aria-pressed', String(S[g.dataset.key] === b.dataset.v))));
     $('#durOut').textContent = fmtDur(S.dur);
+    $('#sizeRow').hidden = S.fmt !== 'sec';
     applyTheme();
   }
   document.querySelectorAll('.seg').forEach(g => g.addEventListener('click', ev => {
