@@ -20,6 +20,13 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:
 body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) max(16px,env(safe-area-inset-right)) env(safe-area-inset-bottom) max(16px,env(safe-area-inset-left));transition:background .3s}
 body[data-state="warn"]{background:color-mix(in srgb,var(--warn) 22%,var(--bg))}
 body[data-state="over"]{background:color-mix(in srgb,var(--over) 26%,var(--bg))}
+/* Background lights replace the soft tint cues */
+body[data-lights="on"][data-state="warn"],body[data-lights="on"][data-state="over"]{background:var(--bg)}
+body[data-lights="on"][data-light="green"]{background:#2e9e4f;--lt:#fff}
+body[data-lights="on"][data-light="yellow"]{background:#f2c200;--lt:#111}
+body[data-lights="on"][data-light="red"]{background:#d1242f;--lt:#fff}
+body[data-light] main,body[data-light] header{color:var(--lt)}
+body[data-light] #unit,body[data-light] #status,body[data-light] h1{color:inherit;opacity:.85}
 header{display:flex;justify-content:space-between;align-items:center;padding:12px 0}
 h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 .icon-btn{background:var(--card);border:1px solid var(--line);color:var(--fg);width:44px;height:44px;border-radius:50%;font-size:20px;cursor:pointer}
@@ -48,6 +55,9 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
 .presets button{flex:1;min-width:0;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-weight:600;cursor:pointer}
 #settings{max-height:62vh;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:none}
 #settings[hidden]{display:none}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px;vertical-align:-1px}
+.hint{font-size:13px;color:var(--muted);padding:2px 0 8px}
+#ltBox{border-top:1px solid var(--line)}#ltBox[hidden]{display:none}#ltBox+.row{border-top:1px solid var(--line)}
 .colrow{flex-direction:column;align-items:flex-start}
 .sw{display:flex;flex-wrap:wrap;margin:6px -5px 0}
 .sw button{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);margin:5px;padding:0;cursor:pointer;background:var(--c)}
@@ -78,6 +88,17 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
   <div class="presets" id="presets"></div>
   <div class="row colrow"><span class="label">Minutes colour</span><div class="sw" id="minSw"></div></div>
   <div class="row colrow" id="secColRow"><span class="label">Seconds colour</span><div class="sw" id="secSw"></div></div>
+  <div class="row"><span class="label">Background lights</span>
+    <div class="seg" data-key="lights"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
+  <div id="ltBox" hidden>
+  <div class="row"><span class="label"><i class="dot" style="background:#2e9e4f"></i>Green at</span>
+    <div class="stepper" data-t="tg"><button class="m" aria-label="Earlier">−</button><output></output><button class="p" aria-label="Later">+</button></div></div>
+  <div class="row"><span class="label"><i class="dot" style="background:#f2c200"></i>Yellow at</span>
+    <div class="stepper" data-t="ty"><button class="m" aria-label="Earlier">−</button><output></output><button class="p" aria-label="Later">+</button></div></div>
+  <div class="row"><span class="label"><i class="dot" style="background:#d1242f"></i>Red at</span>
+    <div class="stepper" data-t="tr"><button class="m" aria-label="Earlier">−</button><output></output><button class="p" aria-label="Later">+</button></div></div>
+    <div class="hint">Each colour turns on at this time from the start and stays until the next one. Works the same for countdown and count up.</div>
+  </div>
   <div class="row"><span class="label">Colour cues &amp; vibrate</span>
     <div class="seg" data-key="cues"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
 </section>
@@ -98,7 +119,7 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
 <script>
 (() => {
   const $ = s => document.querySelector(s);
-  const defaults = {theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', dir:'down', fmt:'sec', size:'normal', mcol:'', scol:'', dur:300, cues:'on'};
+  const defaults = {theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', dir:'down', fmt:'sec', size:'normal', mcol:'', scol:'', lights:'off', tg:300, ty:360, tr:420, dur:300, cues:'on'};
   let S = {...defaults};
   try { Object.assign(S, JSON.parse(localStorage.getItem('speechTimer') || '{}')); } catch(e){}
   const save = () => { try { localStorage.setItem('speechTimer', JSON.stringify(S)); } catch(e){} };
@@ -108,7 +129,9 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
   const fmtDur = s => s % 60 === 0 ? (s/60) + ' min' : Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
   const pad = n => String(n).padStart(2,'0');
 
-  let lastText = '', lastCls = '';
+  let lastText = '', lastCls = '', lastLight = '';
+  const LIGHTCOL = {green:'#2e9e4f', yellow:'#f2c200', red:'#d1242f'};
+  const fmtT = s => Math.floor(s/60) + ':' + pad(s%60);
   // Same size as the minutes view, but shrink only if the text would overflow the screen
   function fit(d) {
     const avail = document.body.clientWidth - 32, w = d.scrollWidth;
@@ -149,6 +172,12 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
         else if (remain <= warnAt) { state = 'warn'; msg = 'Wrap up'; }
       }
     }
+    let light = '';
+    if (S.lights === 'on' && active) light = e >= S.tr ? 'red' : e >= S.ty ? 'yellow' : e >= S.tg ? 'green' : '';
+    document.body.dataset.light = light;
+    if (light !== lastLight) { if (running && S.cues === 'on' && light) buzz(150); lastLight = light; }
+    const bar = LIGHTCOL[light] || (S.theme === 'dark' ? '#0f1115' : '#f6f4ef'), tc = $('meta[name=theme-color]');
+    if (S.lights === 'on' && tc.content !== bar) tc.content = bar;
     document.body.dataset.state = state;
     $('#status').textContent = msg || (active && !running ? 'Paused' : '');
     if (S.cues === 'on' && running) {
@@ -174,7 +203,7 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
   function closeSettings() { $('#settings').hidden = true; $('#gear').setAttribute('aria-expanded', 'false'); }
   function start() { closeSettings(); running = true; startedAt = performance.now(); $('#toggle').textContent = 'Pause'; lock(); loop(); }
   function pause() { accumulated += performance.now() - startedAt; running = false; cancelAnimationFrame(raf); $('#toggle').textContent = 'Resume'; unlock(); render(); }
-  function reset() { running = false; cancelAnimationFrame(raf); accumulated = 0; warned = overed = false; $('#toggle').textContent = 'Start'; unlock(); render(); }
+  function reset() { running = false; cancelAnimationFrame(raf); accumulated = 0; warned = overed = false; lastLight = ''; $('#toggle').textContent = 'Start'; unlock(); render(); }
   $('#toggle').onclick = () => running ? pause() : start();
   $('#reset').onclick = reset;
   $('#display').onclick = () => $('#toggle').click();
@@ -189,6 +218,8 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
       b.setAttribute('aria-pressed', String(S[g.dataset.key] === b.dataset.v))));
     $('#durOut').textContent = fmtDur(S.dur);
     $('#sizeRow').hidden = S.fmt !== 'sec';
+    document.body.dataset.lights = S.lights; $('#ltBox').hidden = S.lights !== 'on';
+    document.querySelectorAll('#ltBox .stepper').forEach(st => st.querySelector('output').textContent = fmtT(S[st.dataset.t]));
     $('#secColRow').hidden = S.fmt !== 'sec';
     const d = $('#display'), sp = d.querySelector('.s');
     d.style.color = S.mcol || ''; if (sp) sp.style.color = S.scol || '';
@@ -215,6 +246,17 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
     b.onclick = () => { S[key] = c; save(); syncUI(); };
     $(sel).appendChild(b);
   }));
+  function adjustT(k, d) {
+    S[k] = Math.max(0, Math.min(3600, S[k] + d));
+    if (k === 'tg') { if (S.ty < S.tg) S.ty = S.tg; if (S.tr < S.ty) S.tr = S.ty; }
+    else if (k === 'ty') { if (S.tg > S.ty) S.tg = S.ty; if (S.tr < S.ty) S.tr = S.ty; }
+    else { if (S.ty > S.tr) S.ty = S.tr; if (S.tg > S.ty) S.tg = S.ty; }
+    save(); syncUI(); render();
+  }
+  document.querySelectorAll('#ltBox .stepper').forEach(st => {
+    st.querySelector('.m').onclick = () => adjustT(st.dataset.t, -15);
+    st.querySelector('.p').onclick = () => adjustT(st.dataset.t, 15);
+  });
   $('#gear').onclick = () => {
     const s = $('#settings'); s.hidden = !s.hidden; $('#gear').setAttribute('aria-expanded', String(!s.hidden));
   };
