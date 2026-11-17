@@ -30,9 +30,13 @@ body[data-light] #unit,body[data-light] #status,body[data-light] h1{color:inheri
 header{display:flex;justify-content:space-between;align-items:center;padding:12px 0}
 h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 .icon-btn{background:var(--card);border:1px solid var(--line);color:var(--fg);width:44px;height:44px;border-radius:50%;font-size:20px;cursor:pointer}
-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0}
+main{flex:1;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0}
 #display{font-variant-numeric:tabular-nums;font-weight:700;line-height:1;text-align:center;font-size:min(34vw,44vh);letter-spacing:-.02em;white-space:nowrap}
 #display.reduced .s{font-size:.5em}
+#display .h{font-size:.4em;margin-right:.12em}
+#display{-webkit-transform:translateZ(0);transform:translateZ(0)}
+#testTag{color:var(--warn);margin-left:8px}
+.tbtns{display:flex;margin:6px -4px 0;width:100%}.tbtns button{flex:1;margin:4px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-weight:600;cursor:pointer}
 #unit{color:var(--muted);font-size:18px;margin-top:6px;min-height:22px}
 #status{margin-top:10px;font-size:15px;font-weight:600;min-height:20px}
 body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #status{color:var(--over)}
@@ -53,7 +57,7 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
 .stepper output{min-width:76px;text-align:center;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
 .presets{display:flex;gap:6px;padding:8px 0}
 .presets button{flex:1;min-width:0;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-weight:600;cursor:pointer}
-#settings{max-height:62vh;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:none}
+#settings{position:relative;z-index:5;max-height:62vh;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:none}
 #settings[hidden]{display:none}
 .dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px;vertical-align:-1px}
 .hint{font-size:13px;color:var(--muted);padding:2px 0 8px}
@@ -70,7 +74,7 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
 </head>
 <body data-state="idle">
 <header>
-  <h1>Speech Timer</h1>
+  <h1>Speech Timer<span id="testTag"></span></h1>
   <button class="icon-btn" id="gear" aria-label="Settings" aria-expanded="false">⚙︎</button>
 </header>
 
@@ -101,6 +105,11 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
   </div>
   <div class="row"><span class="label">Colour cues &amp; vibrate</span>
     <div class="seg" data-key="cues"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
+  <div class="row colrow"><span class="label">Test tools: try it without waiting</span>
+    <div class="tbtns"><button data-jump="3590">Show 59:50</button><button data-jump="7190">Show 1:59:50</button></div>
+    <div class="hint">Jumps the clock and starts it. In Countdown, if the speech is shorter than the jump, it shows as overtime (+).</div></div>
+  <div class="row"><span class="label">Test speed</span>
+    <div class="seg" id="speedSeg"><button data-s="1">1×</button><button data-s="10">10×</button><button data-s="60">60×</button><button data-s="600">600×</button></div></div>
 </section>
 
 <main>
@@ -125,13 +134,14 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
   const save = () => { try { localStorage.setItem('speechTimer', JSON.stringify(S)); } catch(e){} };
 
   let running = false, startedAt = 0, accumulated = 0, raf = 0, wake = null, warned = false, overed = false;
-  const elapsed = () => (accumulated + (running ? performance.now() - startedAt : 0)) / 1000;
-  const fmtDur = s => s % 60 === 0 ? (s/60) + ' min' : Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+  let speed = 1;
+  const elapsed = () => (accumulated + (running ? (performance.now() - startedAt) * speed : 0)) / 1000;
+  const fmtDur = s => s >= 3600 && s % 60 === 0 ? Math.floor(s/3600) + ' h' + (s % 3600 ? ' ' + Math.floor(s%3600/60) + ' m' : '') : s % 60 === 0 ? (s/60) + ' min' : Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
   const pad = n => String(n).padStart(2,'0');
 
   let lastText = '', lastCls = '', lastLight = '';
   const LIGHTCOL = {green:'#2e9e4f', yellow:'#f2c200', red:'#d1242f'};
-  const fmtT = s => Math.floor(s/60) + ':' + pad(s%60);
+  const fmtT = s => s >= 3600 ? Math.floor(s/3600) + ':' + pad(Math.floor(s%3600/60)) + ':' + pad(s%60) : Math.floor(s/60) + ':' + pad(s%60);
   // Same size as the minutes view, but shrink only if the text would overflow the screen
   function fit(d) {
     const avail = document.body.clientWidth - 32, w = d.scrollWidth;
@@ -142,21 +152,28 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
   function render() {
     const e = elapsed(), down = S.dir === 'down';
     const remain = S.dur - e, isOver = down && remain <= 0;
-    let text, unit = '', secPart = '';
+    let plus = '', hourPart = '', text, unit = '', secPart = '';
     if (S.fmt === 'sec') {
       const t = down ? (isOver ? Math.floor(-remain) : Math.ceil(remain)) : Math.floor(e);
-      text = (isOver && t > 0 ? '+' : '') + Math.floor(t/60); secPart = ':' + pad(t%60);
+      plus = isOver && t > 0 ? '+' : '';
+      const h = Math.floor(t/3600), mm = Math.floor((t%3600)/60);
+      if (h > 0) { hourPart = h + 'h'; text = pad(mm); } else text = String(mm);
+      secPart = ':' + pad(t%60);
     } else {
       const m = down ? (isOver ? Math.floor(-remain/60) : Math.ceil(remain/60)) : Math.floor(e/60);
-      text = (isOver && m > 0 ? '+' : '') + m;
+      plus = isOver && m > 0 ? '+' : '';
+      const h = Math.floor(m/60);
+      if (h > 0) { hourPart = h + 'h'; text = pad(m%60); } else text = String(m);
       unit = (m === 1 ? 'minute' : 'minutes') + (down ? (isOver ? ' over' : ' left') : ' elapsed');
     }
     const d = $('#display');
     d.className = S.fmt === 'sec' && S.size === 'reduced' ? 'reduced' : '';
-    const key = text + secPart;
+    const key = plus + hourPart + '|' + text + secPart;
     if (key !== lastText || d.className !== lastCls) {
       lastText = key; lastCls = d.className; d.style.fontSize = '';
-      d.textContent = text;
+      d.textContent = plus;
+      if (hourPart) { const hp = document.createElement('span'); hp.className = 'h'; hp.textContent = hourPart; d.appendChild(hp); }
+      d.appendChild(document.createTextNode(text));
       if (secPart) { const sp = document.createElement('span'); sp.className = 's'; sp.style.color = S.scol || ''; sp.textContent = secPart; d.appendChild(sp); }
       fit(d);
     }
@@ -202,7 +219,7 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
 
   function closeSettings() { $('#settings').hidden = true; $('#gear').setAttribute('aria-expanded', 'false'); }
   function start() { closeSettings(); running = true; startedAt = performance.now(); $('#toggle').textContent = 'Pause'; lock(); loop(); }
-  function pause() { accumulated += performance.now() - startedAt; running = false; cancelAnimationFrame(raf); $('#toggle').textContent = 'Resume'; unlock(); render(); }
+  function pause() { accumulated += (performance.now() - startedAt) * speed; running = false; cancelAnimationFrame(raf); $('#toggle').textContent = 'Resume'; unlock(); render(); }
   function reset() { running = false; cancelAnimationFrame(raf); accumulated = 0; warned = overed = false; lastLight = ''; $('#toggle').textContent = 'Start'; unlock(); render(); }
   $('#toggle').onclick = () => running ? pause() : start();
   $('#reset').onclick = reset;
@@ -214,7 +231,7 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
     document.documentElement.style.colorScheme = S.theme;
   }
   function syncUI() {
-    document.querySelectorAll('.seg').forEach(g => g.querySelectorAll('button').forEach(b =>
+    document.querySelectorAll('.seg[data-key]').forEach(g => g.querySelectorAll('button').forEach(b =>
       b.setAttribute('aria-pressed', String(S[g.dataset.key] === b.dataset.v))));
     $('#durOut').textContent = fmtDur(S.dur);
     $('#sizeRow').hidden = S.fmt !== 'sec';
@@ -227,15 +244,15 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
       document.querySelectorAll(sel + ' button').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.c || '') === (S[key] || '')))));
     applyTheme();
   }
-  document.querySelectorAll('.seg').forEach(g => g.addEventListener('click', ev => {
+  document.querySelectorAll('.seg[data-key]').forEach(g => g.addEventListener('click', ev => {
     const b = ev.target.closest('button'); if (!b) return;
     S[g.dataset.key] = b.dataset.v; save(); syncUI(); render();
   }));
-  const setDur = d => { S.dur = Math.max(15, Math.min(3600, d)); warned = overed = false; save(); syncUI(); render(); };
-  const stepFor = (d, dir) => (d < 60 || (d === 60 && dir < 0)) ? 15 : 30;
+  const setDur = d => { S.dur = Math.max(15, Math.min(36000, d)); warned = overed = false; save(); syncUI(); render(); };
+  const stepFor = (d, dir) => { const r = dir < 0 ? d - 1 : d; return r < 60 ? 15 : r < 600 ? 30 : r < 3600 ? 60 : 300; };
   $('#durUp').onclick = () => setDur(S.dur + stepFor(S.dur, 1));
   $('#durDown').onclick = () => setDur(S.dur - stepFor(S.dur, -1));
-  [1,2,3,5,7,10].forEach(m => {
+  [1,2,3,5,7,10,30,60].forEach(m => {
     const b = document.createElement('button'); b.textContent = m + 'm'; b.onclick = () => setDur(m*60); $('#presets').appendChild(b);
   });
   const COLORS = ['', '#ffffff', '#111111', '#808080', '#f5c518', '#34c759', '#ff9f0a', '#ff453a', '#0a84ff', '#5ac8fa', '#bf5af2'];
@@ -246,17 +263,33 @@ body[data-state="warn"] #status{color:var(--warn)}body[data-state="over"] #statu
     b.onclick = () => { S[key] = c; save(); syncUI(); };
     $(sel).appendChild(b);
   }));
-  function adjustT(k, d) {
-    S[k] = Math.max(0, Math.min(3600, S[k] + d));
+  function adjustT(k, dir) {
+    const ref = dir < 0 ? S[k] - 1 : S[k];
+    S[k] = Math.max(0, Math.min(36000, S[k] + dir * (ref >= 3600 ? 300 : 15)));
     if (k === 'tg') { if (S.ty < S.tg) S.ty = S.tg; if (S.tr < S.ty) S.tr = S.ty; }
     else if (k === 'ty') { if (S.tg > S.ty) S.tg = S.ty; if (S.tr < S.ty) S.tr = S.ty; }
     else { if (S.ty > S.tr) S.ty = S.tr; if (S.tg > S.ty) S.tg = S.ty; }
     save(); syncUI(); render();
   }
   document.querySelectorAll('#ltBox .stepper').forEach(st => {
-    st.querySelector('.m').onclick = () => adjustT(st.dataset.t, -15);
-    st.querySelector('.p').onclick = () => adjustT(st.dataset.t, 15);
+    st.querySelector('.m').onclick = () => adjustT(st.dataset.t, -1);
+    st.querySelector('.p').onclick = () => adjustT(st.dataset.t, 1);
   });
+  // Test tools (not saved): jump the clock, change clock speed
+  function jumpTo(T) {
+    const e = S.dir === 'down' ? (T <= S.dur ? S.dur - T : S.dur + T) : T;
+    accumulated = e * 1000; warned = overed = false; lastLight = '';
+    if (running) { startedAt = performance.now(); closeSettings(); render(); } else start();
+  }
+  document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => jumpTo(+b.dataset.jump));
+  function setSpeed(v) {
+    if (running) { accumulated += (performance.now() - startedAt) * speed; startedAt = performance.now(); }
+    speed = v;
+    document.querySelectorAll('#speedSeg button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.s === speed)));
+    $('#testTag').textContent = speed === 1 ? '' : 'TEST ×' + speed;
+  }
+  document.querySelectorAll('#speedSeg button').forEach(b => b.onclick = () => setSpeed(+b.dataset.s));
+  setSpeed(1);
   $('#gear').onclick = () => {
     const s = $('#settings'); s.hidden = !s.hidden; $('#gear').setAttribute('aria-expanded', String(!s.hidden));
   };
